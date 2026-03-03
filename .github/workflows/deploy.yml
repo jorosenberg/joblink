@@ -91,8 +91,9 @@ jobs:
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
       run: |
         docker build --provenance=false \
+          -f backend/api/Dockerfile \
           -t $ECR_REGISTRY/jobscraper-api:latest \
-          ./backend/api
+          ./backend
         docker push $ECR_REGISTRY/jobscraper-api:latest
         echo "::notice::Pushed $ECR_REGISTRY/jobscraper-api:latest"
 
@@ -101,8 +102,9 @@ jobs:
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
       run: |
         docker build --provenance=false \
+          -f backend/scraper/Dockerfile \
           -t $ECR_REGISTRY/jobscraper-scraper:latest \
-          ./backend/scraper
+          ./backend
         docker push $ECR_REGISTRY/jobscraper-scraper:latest
         echo "::notice::Pushed $ECR_REGISTRY/jobscraper-scraper:latest"
 
@@ -111,9 +113,10 @@ jobs:
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
       run: |
         docker build --provenance=false \
+          -f backend/analysis/Dockerfile \
           --build-arg HF_TOKEN=${{ secrets.HF_TOKEN }} \
           -t $ECR_REGISTRY/jobscraper-analysis:latest \
-          ./backend/analysis
+          ./backend
         docker push $ECR_REGISTRY/jobscraper-analysis:latest
         echo "::notice::Pushed $ECR_REGISTRY/jobscraper-analysis:latest"
 

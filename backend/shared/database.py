@@ -294,6 +294,16 @@ class JobDatabase:
 
         return [(row["similar_job_id"], row["title"], row["similarity_score"])
                 for row in self.cursor.fetchall()]
+    def get_all_similarities(self, min_score: float = 0.5) -> List[Dict]:
+        self.connect()
+        self.cursor.execute("""
+            SELECT job_id_1, job_id_2, similarity_score
+            FROM job_similarities
+            WHERE similarity_score >= %s
+            ORDER BY similarity_score DESC
+        """, (min_score,))
+        return [dict(row) for row in self.cursor.fetchall()]
+
 
     def get_jobs_without_embeddings(self) -> List[Dict]:
         self.connect()
