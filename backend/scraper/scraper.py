@@ -1,7 +1,11 @@
 from curl_cffi import requests as cffi_requests
 from bs4 import BeautifulSoup
 import re
-from urllib.parse import urlencode, urlparse, parse_qs
+import logging
+from urllib.parse import urlparse
+
+logger = logging.getLogger()
+
 
 class JobScraper:
     def __init__(self, base_url, limit=10, filters=None):
@@ -21,47 +25,33 @@ class JobScraper:
         self.job_links = []
         self.job_pages = []
 
-    def fetch_page(self, url, indent=1):
-        indent_str = "    " * indent
+    def fetch_page(self, url):
         try:
-            print(f"{indent_str}Connecting to {url[:80]}...")
+            logger.info(f"Fetching {url[:80]}...")
             response = self.session.get(url, headers=self.headers, impersonate="chrome110")
-
-            print(f"{indent_str}[OK] Connected (Status: {response.status_code})")
-
             response.raise_for_status()
-
-            content_length = len(response.text)
-            print(f"{indent_str}[OK] Received {content_length:,} bytes")
-
+            logger.info(f"Received {len(response.text):,} bytes")
             return response.text
         except Exception as e:
-            print(f"{indent_str}[FAIL] Connection failed: {e}")
+            logger.error(f"Failed to fetch {url[:80]}: {e}")
             return None
 
     def parse_greenhouse_board(self, html_content):
         soup = BeautifulSoup(html_content, 'html.parser')
-
         company_match = re.search(r'greenhouse\.io/([^/?]+)', self.base_url)
         if not company_match:
-            print("Could not extract company name from URL")
             return []
 
         company = company_match.group(1)
-
         all_links = soup.find_all('a', href=True)
-
         job_data = []
         seen_urls = set()
 
         for link_tag in all_links:
             href = link_tag.get('href')
-
             job_match = re.search(r'/jobs/(\d+)', href)
-
             if job_match:
                 job_id = job_match.group(1)
-
                 if href.startswith('http'):
                     full_url = href
                 else:
@@ -72,19 +62,13 @@ class JobScraper:
                 seen_urls.add(full_url)
 
                 title = link_tag.get_text(strip=True)
-
                 if title and full_url:
-                    job_data.append({
-                        'title': title,
-                        'url': full_url
-                    })
+                    job_data.append({'title': title, 'url': full_url})
 
         return job_data
 
-
     def parse_lever_board(self, html_content):
         soup = BeautifulSoup(html_content, 'html.parser')
-
         parsed_url = urlparse(self.base_url)
         base_domain = f"{parsed_url.scheme}://{parsed_url.netloc}"
 
@@ -92,13 +76,11 @@ class JobScraper:
         company = company_match.group(1) if company_match else None
 
         all_links = soup.find_all('a', href=True)
-
         job_data = []
         seen_urls = set()
 
         for link_tag in all_links:
             href = link_tag.get('href')
-
             is_job_url = False
 
             if company and href.startswith(f'/{company}/') and len(href) > len(f'/{company}/') + 10:
@@ -126,12 +108,8 @@ class JobScraper:
             seen_urls.add(full_url)
 
             title = link_tag.get_text(strip=True)
-
             if title and full_url and len(title) > 3:
-                job_data.append({
-                    'title': title,
-                    'url': full_url
-                })
+                job_data.append({'title': title, 'url': full_url})
 
         return job_data
 
@@ -140,7 +118,6 @@ class JobScraper:
         params = []
 
         is_lever = 'jobs.lever.co' in self.base_url.lower()
-
         if is_lever:
             return search_url
 
@@ -163,64 +140,32 @@ class JobScraper:
         is_lever = "jobs.lever.co" in self.base_url.lower()
 
         if not is_greenhouse and not is_lever:
-            print("Not a greenhouse.io or Lever URL, using Selenium scraper...")
-            from selenium_scraper import SeleniumJobScraper
-
-            selenium_scraper = SeleniumJobScraper(
-                base_url=self.base_url,
-                limit=self.limit,
-                filters=self.filters
-            )
-            return selenium_scraper.scrape()
-
-        if is_lever:
-            board_type = "Lever"
-        else:
-            board_type = "Greenhouse.io"
-        print(f"Detected {board_type} job board, using fast HTTP scraper...")
-
-        search_url = self.build_search_url()
-
-        filter_info = []
-        if self.skills and self.skills != ['']:
-            if is_lever:
-                filter_info.append(f"keywords: {self.skills} (will filter during parsing)")
-            else:
-                filter_info.append(f"keywords: {self.skills}")
-        if self.location:
-            filter_info.append(f"location: {self.location}")
-
-        filter_str = ', '.join(filter_info) if filter_info else 'no filters'
-        print(f"[2] Fetching job board with {filter_str}")
-        print(f"    URL: {search_url}")
-        html_content = self.fetch_page(search_url, indent=1)
-
-        if not html_content:
-            print("Failed to fetch job board")
+            logger.error(f"Unsupported URL for Lambda scraping: {self.base_url}")
             return []
 
-        print("[3] Parsing job listings...")
+        search_url = self.build_search_url()
+        logger.info(f"Fetching job board: {search_url}")
+        html_content = self.fetch_page(search_url)
+
+        if not html_content:
+            return []
+
         if is_lever:
             jobs = self.parse_lever_board(html_content)
         else:
             jobs = self.parse_greenhouse_board(html_content)
 
-        if is_lever and not self.skills:
-            print(f"    Found {len(jobs)} jobs (Lever has no search - all jobs scraped)")
-        else:
-            print(f"    Found {len(jobs)} jobs")
+        logger.info(f"Found {len(jobs)} jobs")
 
-        jobs_to_scrape = jobs
-        self.job_links = [job['url'] for job in jobs_to_scrape]
+        self.job_links = [job['url'] for job in jobs]
 
-        if len(jobs_to_scrape) == 0:
-            print("[!] No jobs found to scrape")
+        if not jobs:
             return []
 
-        print(f"[4] Fetching {len(jobs_to_scrape)} job pages (will add {self.limit} new jobs or until exhausted)...")
-        for i, job in enumerate(jobs_to_scrape, 1):
-            print(f"    [{i}/{len(jobs_to_scrape)}] {job['title']}")
-            job_html = self.fetch_page(job['url'], indent=2)
+        logger.info(f"Fetching {len(jobs)} job pages...")
+        for i, job in enumerate(jobs, 1):
+            logger.info(f"[{i}/{len(jobs)}] {job['title']}")
+            job_html = self.fetch_page(job['url'])
             if job_html:
                 self.job_pages.append({
                     'url': job['url'],
@@ -228,6 +173,5 @@ class JobScraper:
                     'html': job_html
                 })
 
-        print(f"[5] Successfully scraped {len(self.job_pages)} job pages")
-        print(f"    Processing will continue until {self.limit} new jobs are added or all pages are processed")
+        logger.info(f"Successfully scraped {len(self.job_pages)} job pages")
         return self.job_pages

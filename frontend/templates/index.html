@@ -39,7 +39,7 @@
 
         .scraper-form {
             display: grid;
-            grid-template-columns: 1.5fr 2fr 1fr 1.5fr 1.5fr auto;
+            grid-template-columns: 1.5fr 2fr 0.8fr 1.2fr 1.2fr 1fr auto;
             gap: 1rem;
             align-items: end;
         }
@@ -203,6 +203,7 @@
         }
 
         .job-item {
+            position: relative;
             background: #f8f9fa;
             border: 2px solid transparent;
             border-radius: 8px;
@@ -248,6 +249,25 @@
             border-radius: 10px;
             font-size: 0.7rem;
             font-weight: 500;
+        }
+
+        .job-delete-btn {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            background: none;
+            border: none;
+            color: #ccc;
+            font-size: 1.1rem;
+            cursor: pointer;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        .job-delete-btn:hover {
+            color: #e53e3e;
+            background: #fee2e2;
         }
 
         .right-panel {
@@ -498,6 +518,10 @@
                 <label>Skills (optional)</label>
                 <input type="text" id="scrape-skills" placeholder="python, javascript, react">
             </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" id="scrape-password" placeholder="Enter password" required>
+            </div>
             <button type="submit" class="scrape-btn" id="scrape-btn">Start Scraping</button>
         </form>
 
@@ -567,14 +591,16 @@
     </div>
 
     <script>
+        const API_BASE_URL = '{{ api_gateway_url }}';
+
         let allJobs = [];
         let network = null;
         let graphData = null;
         let selectedJobId = null;
         let statusCheckInterval = null;
         let savedBoards = [];
+        let currentScrapeId = null;
 
-        // Load data on startup
         loadJobs();
         loadGraph();
         loadSavedBoards();
@@ -586,19 +612,21 @@
             const limit = document.getElementById('scrape-limit').value;
             const location = document.getElementById('scrape-location').value;
             const skills = document.getElementById('scrape-skills').value;
+            const password = document.getElementById('scrape-password').value;
 
-            fetch('/api/scrape', {
+            fetch(API_BASE_URL + '/api/scrape', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ url, limit, location, skills })
+                body: JSON.stringify({ url, limit, location, skills, password })
             })
             .then(response => response.json())
             .then(data => {
                 if (data.error) {
                     alert(data.error);
                 } else {
+                    currentScrapeId = data.scrape_id;
                     document.getElementById('status-bar').classList.add('active');
                     document.getElementById('scrape-btn').disabled = true;
                     startStatusChecking();
@@ -611,7 +639,7 @@
 
         function startStatusChecking() {
             statusCheckInterval = setInterval(() => {
-                fetch('/api/scrape/status')
+                fetch(API_BASE_URL + '/api/scrape/status?scrape_id=' + currentScrapeId)
                     .then(response => response.json())
                     .then(status => {
                         updateStatus(status);
@@ -636,7 +664,6 @@
                 statusText += ` - ${status.current_job}`;
             }
 
-            // Add real-time counts during scraping
             if (status.is_running && (status.jobs_added > 0 || status.duplicates_skipped > 0)) {
                 const counts = [];
                 if (status.jobs_added > 0) counts.push(`${status.jobs_added} new`);
@@ -649,7 +676,6 @@
             message.textContent = statusText;
 
             if (status.total > 0) {
-                // Calculate percentage based on jobs added vs target, capped at 100%
                 const percentage = Math.min(100, Math.round((status.jobs_added / status.total) * 100));
                 fill.style.width = percentage + '%';
                 fill.textContent = `${status.jobs_added}/${status.total}`;
@@ -658,7 +684,7 @@
 
         async function loadJobs() {
             try {
-                const response = await fetch('/api/jobs');
+                const response = await fetch(API_BASE_URL + '/api/jobs');
                 allJobs = await response.json();
                 displayJobs(allJobs);
             } catch (error) {
@@ -703,7 +729,6 @@
                     }
                 }
 
-                // Format date
                 let dateText = '';
                 if (job.date_posted) {
                     const date = new Date(job.date_posted);
@@ -713,13 +738,13 @@
                     dateText = `Scraped: ${date.toLocaleDateString()}`;
                 }
 
-                // Format experience
                 let expText = job.experience_level || 'N/A';
                 if (job.years_experience) {
                     expText = `${job.years_experience}+ years`;
                 }
 
                 item.innerHTML = `
+                    <button class="job-delete-btn" onclick="deleteJob(${job.id}, event)" title="Delete job">&#x2715;</button>
                     <h4>${job.title}</h4>
                     <p><strong>${job.company}</strong> • ${job.location}</p>
                     <p>${expText} • ${job.employment_type || 'N/A'}</p>
@@ -732,19 +757,38 @@
             });
         }
 
+        async function deleteJob(jobId, event) {
+            event.stopPropagation();
+            const password = prompt('Enter password to delete this job:');
+            if (!password) return;
+
+            try {
+                const response = await fetch(API_BASE_URL + '/api/job/' + jobId, {
+                    method: 'DELETE',
+                    headers: { 'X-Scrape-Password': password }
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    loadJobs();
+                    loadGraph();
+                } else {
+                    alert(data.error || 'Failed to delete job');
+                }
+            } catch (error) {
+                alert('Error deleting job: ' + error);
+            }
+        }
+
         function selectJob(jobId, event) {
             selectedJobId = jobId;
 
-            // Update job list selection
             document.querySelectorAll('.job-item').forEach(item => {
                 item.classList.remove('selected');
             });
 
-            // Only try to highlight the clicked item if event exists (from job list)
             if (event && event.currentTarget) {
                 event.currentTarget.classList.add('selected');
             } else {
-                // If called from graph, find and highlight the job item by ID
                 const jobItems = document.querySelectorAll('.job-item');
                 jobItems.forEach(item => {
                     if (item.onclick && item.onclick.toString().includes(`selectJob(${jobId}`)) {
@@ -753,7 +797,6 @@
                 });
             }
 
-            // Highlight node in graph
             if (network) {
                 network.selectNodes([jobId]);
                 network.focus(jobId, {
@@ -765,13 +808,12 @@
                 });
             }
 
-            // Show details
             showJobDetails(jobId);
         }
 
         async function showJobDetails(jobId) {
             try {
-                const response = await fetch(`/api/job/${jobId}`);
+                const response = await fetch(API_BASE_URL + '/api/job/' + jobId);
                 const data = await response.json();
                 const job = data.job;
                 const similarJobs = data.similar_jobs;
@@ -799,7 +841,6 @@
                     `).join('') :
                     '<p>No similar jobs found</p>';
 
-                // Format dates
                 let dateInfo = '';
                 if (job.date_posted) {
                     const date = new Date(job.date_posted);
@@ -810,7 +851,6 @@
                     dateInfo += `<p class="job-info"><strong>Scraped:</strong> ${date.toLocaleDateString()}</p>`;
                 }
 
-                // Format experience for modal
                 let expDisplay = job.experience_level || 'Unknown';
                 if (job.years_experience) {
                     expDisplay = `${job.experience_level || 'Unknown'} (${job.years_experience}+ years)`;
@@ -868,7 +908,7 @@
             if (yearsMax) params.append('years_max', yearsMax);
 
             try {
-                const response = await fetch('/api/jobs?' + params.toString());
+                const response = await fetch(API_BASE_URL + '/api/jobs?' + params.toString());
                 allJobs = await response.json();
                 displayJobs(allJobs);
             } catch (error) {
@@ -878,7 +918,7 @@
 
         async function loadGraph() {
             try {
-                const response = await fetch('/api/graph');
+                const response = await fetch(API_BASE_URL + '/api/graph');
                 graphData = await response.json();
 
                 if (!graphData.nodes || graphData.nodes.length === 0) {
@@ -900,7 +940,6 @@
 
             const container = document.getElementById('mynetwork');
 
-            // Only clear if network doesn't exist yet (first time)
             if (!network) {
                 container.innerHTML = '';
             }
@@ -979,11 +1018,10 @@
 
         async function loadSavedBoards() {
             try {
-                const response = await fetch('/api/job-boards');
+                const response = await fetch(API_BASE_URL + '/api/job-boards');
                 savedBoards = await response.json();
 
                 const select = document.getElementById('saved-boards');
-                // Keep the default option
                 select.innerHTML = '<option value="">-- Select a saved board --</option>';
 
                 savedBoards.forEach(board => {
