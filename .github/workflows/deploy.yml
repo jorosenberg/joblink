@@ -88,21 +88,19 @@ jobs:
         rm -rf package && mkdir -p package
         pip install \
           --target ./package \
-          -r requirements.txt \
-          --platform manylinux2014_x86_64 \
-          --only-binary=:all: \
-          --implementation cp \
-          --python-version 3.11 \
-          --upgrade
-        pip install \
-          --target ./package \
-          torch \
+          "torch>=2.0.0" \
           --platform linux_x86_64 \
           --only-binary=:all: \
           --implementation cp \
           --python-version 3.11 \
-          --index-url https://download.pytorch.org/whl/cpu \
-          --upgrade
+          --index-url https://download.pytorch.org/whl/cpu
+        pip install \
+          --target ./package \
+          -r requirements.txt \
+          --platform manylinux2014_x86_64 \
+          --only-binary=:all: \
+          --implementation cp \
+          --python-version 3.11
 
     - name: Login to Amazon ECR
       id: login-ecr
