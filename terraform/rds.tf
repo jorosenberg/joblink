@@ -18,7 +18,7 @@ resource "aws_db_instance" "jobsdb" {
   vpc_security_group_ids  = [aws_security_group.rds.id]
   publicly_accessible     = true
   skip_final_snapshot     = true
-  backup_retention_period = 7
+  backup_retention_period = 0
   multi_az                = false
   tags                    = local.common_tags
 }
