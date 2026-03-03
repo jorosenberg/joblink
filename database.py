@@ -150,7 +150,6 @@ class JobDatabase:
             return job_id
 
         except sqlite3.IntegrityError:
-            # Silently skip duplicates - URL is unique
             return None
         except Exception as e:
             print(f"Error inserting job: {e}")
