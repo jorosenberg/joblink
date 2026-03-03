@@ -11,7 +11,7 @@ resource "aws_secretsmanager_secret_version" "db_credentials" {
     password = var.db_password
     host     = aws_db_instance.jobsdb.address
     port     = 5432
-    dbname   = "jobscraper"
+    dbname   = "jobsdb"
   })
 }
 

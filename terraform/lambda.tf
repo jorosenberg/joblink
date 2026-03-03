@@ -10,7 +10,7 @@ resource "aws_lambda_function" "api" {
     variables = {
       DB_SECRET_ARN       = aws_secretsmanager_secret.db_credentials.arn
       DB_HOST             = aws_db_instance.jobsdb.address
-      DB_NAME             = "jobscraper"
+      DB_NAME             = "jobsdb"
       SCRAPE_PASSWORD_ARN = aws_secretsmanager_secret.scrape_password.arn
     }
   }
@@ -30,7 +30,7 @@ resource "aws_lambda_function" "scraper" {
     variables = {
       DB_SECRET_ARN        = aws_secretsmanager_secret.db_credentials.arn
       DB_HOST              = aws_db_instance.jobsdb.address
-      DB_NAME              = "jobscraper"
+      DB_NAME              = "jobsdb"
       ANALYSIS_LAMBDA_NAME = "${local.project_name}-analysis"
       SCRAPE_PASSWORD_ARN  = aws_secretsmanager_secret.scrape_password.arn
       EC2_SCRAPE_URL       = "http://${aws_instance.frontend.public_ip}/internal/selenium-scrape"
@@ -54,7 +54,7 @@ resource "aws_lambda_function" "analysis" {
     variables = {
       DB_SECRET_ARN = aws_secretsmanager_secret.db_credentials.arn
       DB_HOST       = aws_db_instance.jobsdb.address
-      DB_NAME       = "jobscraper"
+      DB_NAME       = "jobsdb"
       HF_TOKEN_ARN  = aws_secretsmanager_secret.hf_token.arn
     }
   }
