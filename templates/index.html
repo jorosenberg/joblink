@@ -1,0 +1,1014 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Job Scraper Dashboard</title>
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .scraper-controls {
+            background: white;
+            padding: 1.5rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .scraper-form {
+            display: grid;
+            grid-template-columns: 1.5fr 2fr 1fr 1.5fr 1.5fr auto;
+            gap: 1rem;
+            align-items: end;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .form-group label {
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+            color: #666;
+        }
+
+        .form-group input, .form-group select {
+            padding: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 0.9rem;
+        }
+
+        .form-group select {
+            background: white;
+            cursor: pointer;
+        }
+
+        .scrape-btn {
+            padding: 0.5rem 2rem;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .scrape-btn:hover:not(:disabled) {
+            background: #5568d3;
+        }
+
+        .scrape-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .status-bar {
+            margin-top: 1rem;
+            padding: 0.75rem;
+            background: #f8f9fa;
+            border-radius: 6px;
+            display: none;
+        }
+
+        .status-bar.active {
+            display: block;
+        }
+
+        .status-message {
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+            color: #666;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 24px;
+            background: #e0e0e0;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .main-container {
+            display: grid;
+            grid-template-columns: 400px 1fr;
+            height: calc(100vh - 200px);
+            gap: 0;
+        }
+
+        .left-panel {
+            background: white;
+            border-right: 1px solid #e0e0e0;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .filters-section {
+            padding: 1.5rem;
+            border-bottom: 2px solid #e0e0e0;
+            overflow-y: auto;
+            max-height: 300px;
+        }
+
+        .filters-section h3 {
+            font-size: 1rem;
+            margin-bottom: 1rem;
+            color: #667eea;
+        }
+
+        .filter-group {
+            margin-bottom: 1rem;
+        }
+
+        .filter-group label {
+            display: block;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+            color: #666;
+        }
+
+        .filter-group input, .filter-group select {
+            width: 100%;
+            padding: 0.4rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 0.85rem;
+        }
+
+        .filter-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+        }
+
+        .apply-filters-btn {
+            width: 100%;
+            padding: 0.5rem;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 0.5rem;
+        }
+
+        .apply-filters-btn:hover {
+            background: #5568d3;
+        }
+
+        .jobs-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1rem;
+        }
+
+        .job-item {
+            background: #f8f9fa;
+            border: 2px solid transparent;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .job-item:hover {
+            border-color: #667eea;
+            transform: translateX(4px);
+        }
+
+        .job-item.selected {
+            border-color: #667eea;
+            background: #e8eaf6;
+        }
+
+        .job-item h4 {
+            color: #667eea;
+            font-size: 0.95rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .job-item p {
+            font-size: 0.8rem;
+            color: #666;
+            margin: 0.15rem 0;
+        }
+
+        .job-skills {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.25rem;
+            margin-top: 0.5rem;
+        }
+
+        .skill-tag {
+            background: #667eea;
+            color: white;
+            padding: 0.15rem 0.5rem;
+            border-radius: 10px;
+            font-size: 0.7rem;
+            font-weight: 500;
+        }
+
+        .right-panel {
+            display: flex;
+            flex-direction: column;
+            background: white;
+            overflow: hidden;
+        }
+
+        .graph-header {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid #e0e0e0;
+            background: #f8f9fa;
+        }
+
+        .graph-header h3 {
+            font-size: 1rem;
+            color: #667eea;
+            margin-bottom: 0.5rem;
+        }
+
+        .graph-controls {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .graph-controls label {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #666;
+        }
+
+        .graph-controls input[type="range"] {
+            flex: 1;
+            max-width: 200px;
+        }
+
+        .graph-controls span {
+            font-weight: 600;
+            color: #667eea;
+            min-width: 40px;
+        }
+
+        #mynetwork {
+            flex: 1;
+            width: 100%;
+            height: 100%;
+            min-height: 400px;
+        }
+
+        .graph-empty-state {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: #999;
+            font-size: 1rem;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            animation: fadeIn 0.3s;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 3% auto;
+            padding: 2rem;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 800px;
+            max-height: 85vh;
+            overflow-y: auto;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            animation: slideUp 0.3s;
+        }
+
+        @keyframes slideUp {
+            from {
+                transform: translateY(50px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            line-height: 20px;
+        }
+
+        .close:hover {
+            color: #000;
+        }
+
+        .modal h2 {
+            color: #667eea;
+            margin-bottom: 1rem;
+        }
+
+        .modal-section {
+            margin: 1.5rem 0;
+        }
+
+        .modal-section h3 {
+            font-size: 1rem;
+            margin-bottom: 0.75rem;
+            color: #333;
+        }
+
+        .job-info {
+            color: #666;
+            font-size: 0.9rem;
+            margin: 0.5rem 0;
+        }
+
+        .job-info strong {
+            color: #333;
+        }
+
+        .pay-range {
+            background: #f0f9ff;
+            color: #0369a1;
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            margin-top: 1rem;
+            font-weight: 600;
+            display: inline-block;
+        }
+
+        .skills-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+        }
+
+        .skills-grid .skill-tag {
+            background: #e8eaf6;
+            color: #667eea;
+            padding: 0.35rem 0.75rem;
+            border-radius: 16px;
+            font-size: 0.85rem;
+        }
+
+        .similar-jobs {
+            margin-top: 1.5rem;
+        }
+
+        .similar-job {
+            background: #f8f9fa;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 0.75rem;
+            border-left: 4px solid #667eea;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .similar-job:hover {
+            background: #e8eaf6;
+        }
+
+        .similarity-score {
+            background: #667eea;
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            display: inline-block;
+            margin-left: 0.5rem;
+        }
+
+        .view-job-btn {
+            display: inline-block;
+            margin-top: 1rem;
+            padding: 0.5rem 1rem;
+            background: #667eea;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            transition: background 0.3s;
+        }
+
+        .view-job-btn:hover {
+            background: #5568d3;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 3rem;
+            color: #999;
+        }
+
+        .empty-state h3 {
+            margin-bottom: 1rem;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Job Scraper Dashboard</h1>
+    </div>
+
+    <div class="scraper-controls">
+        <form class="scraper-form" onsubmit="startScraping(event)">
+            <div class="form-group">
+                <label>Saved Boards</label>
+                <select id="saved-boards" onchange="selectSavedBoard()">
+                    <option value="">-- Select a saved board --</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Job Board URL</label>
+                <input type="text" id="scrape-url" placeholder="https://boards.greenhouse.io/..." required>
+            </div>
+            <div class="form-group">
+                <label>Jobs to Add</label>
+                <input type="number" id="scrape-limit" value="10" min="1" max="100">
+            </div>
+            <div class="form-group">
+                <label>Location (optional)</label>
+                <input type="text" id="scrape-location" placeholder="location">
+            </div>
+            <div class="form-group">
+                <label>Skills (optional)</label>
+                <input type="text" id="scrape-skills" placeholder="python, javascript, react">
+            </div>
+            <button type="submit" class="scrape-btn" id="scrape-btn">Start Scraping</button>
+        </form>
+
+        <div class="status-bar" id="status-bar">
+            <div class="status-message" id="status-message">Ready</div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progress-fill" style="width: 0%">0%</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <div class="left-panel">
+            <div class="filters-section">
+                <h3>Filter Jobs</h3>
+                <div class="filter-group">
+                    <label>Skills</label>
+                    <input type="text" id="filter-skills" placeholder="python, react, etc.">
+                </div>
+                <div class="filter-group">
+                    <label>Location</label>
+                    <input type="text" id="filter-location" placeholder="San Francisco, Remote, etc.">
+                </div>
+                <div class="filter-group">
+                    <label>Pay Range</label>
+                    <div class="filter-row">
+                        <input type="number" id="filter-pay-min" placeholder="Min">
+                        <input type="number" id="filter-pay-max" placeholder="Max">
+                    </div>
+                </div>
+                <div class="filter-group">
+                    <label>Years of Experience</label>
+                    <div class="filter-row">
+                        <input type="number" id="filter-years-min" placeholder="Min Years" min="0" max="30">
+                        <input type="number" id="filter-years-max" placeholder="Max Years" min="0" max="30">
+                    </div>
+                </div>
+                <button class="apply-filters-btn" onclick="applyFilters()">Apply Filters</button>
+            </div>
+
+            <div class="jobs-list" id="jobs-list">
+                <div class="empty-state">
+                    <h3>No jobs yet</h3>
+                    <p>Start scraping to see jobs here</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="right-panel">
+            <div class="graph-header">
+                <h3>Job Similarity Graph</h3>
+                <div class="graph-controls">
+                    <label for="similarity-threshold">Min Similarity:</label>
+                    <input type="range" id="similarity-threshold" min="0" max="1" step="0.05" value="0.9">
+                    <span id="threshold-value">0.90</span>
+                </div>
+            </div>
+            <div id="mynetwork"></div>
+        </div>
+    </div>
+
+    <div id="jobModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal()">&times;</span>
+            <div id="modal-body"></div>
+        </div>
+    </div>
+
+    <script>
+        let allJobs = [];
+        let network = null;
+        let graphData = null;
+        let selectedJobId = null;
+        let statusCheckInterval = null;
+        let savedBoards = [];
+
+        // Load data on startup
+        loadJobs();
+        loadGraph();
+        loadSavedBoards();
+
+        function startScraping(event) {
+            event.preventDefault();
+
+            const url = document.getElementById('scrape-url').value;
+            const limit = document.getElementById('scrape-limit').value;
+            const location = document.getElementById('scrape-location').value;
+            const skills = document.getElementById('scrape-skills').value;
+
+            fetch('/api/scrape', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ url, limit, location, skills })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert(data.error);
+                } else {
+                    document.getElementById('status-bar').classList.add('active');
+                    document.getElementById('scrape-btn').disabled = true;
+                    startStatusChecking();
+                }
+            })
+            .catch(error => {
+                alert('Error starting scraper: ' + error);
+            });
+        }
+
+        function startStatusChecking() {
+            statusCheckInterval = setInterval(() => {
+                fetch('/api/scrape/status')
+                    .then(response => response.json())
+                    .then(status => {
+                        updateStatus(status);
+
+                        if (!status.is_running) {
+                            clearInterval(statusCheckInterval);
+                            document.getElementById('scrape-btn').disabled = false;
+                            loadJobs();
+                            loadGraph();
+                            loadSavedBoards();
+                        }
+                    });
+            }, 500);
+        }
+
+        function updateStatus(status) {
+            const message = document.getElementById('status-message');
+            const fill = document.getElementById('progress-fill');
+
+            let statusText = status.message;
+            if (status.current_job) {
+                statusText += ` - ${status.current_job}`;
+            }
+
+            // Add real-time counts during scraping
+            if (status.is_running && (status.jobs_added > 0 || status.duplicates_skipped > 0)) {
+                const counts = [];
+                if (status.jobs_added > 0) counts.push(`${status.jobs_added} new`);
+                if (status.duplicates_skipped > 0) counts.push(`${status.duplicates_skipped} duplicates`);
+                if (counts.length > 0) {
+                    statusText += ` (${counts.join(', ')})`;
+                }
+            }
+
+            message.textContent = statusText;
+
+            if (status.total > 0) {
+                // Calculate percentage based on jobs added vs target, capped at 100%
+                const percentage = Math.min(100, Math.round((status.jobs_added / status.total) * 100));
+                fill.style.width = percentage + '%';
+                fill.textContent = `${status.jobs_added}/${status.total}`;
+            }
+        }
+
+        async function loadJobs() {
+            try {
+                const response = await fetch('/api/jobs');
+                allJobs = await response.json();
+                displayJobs(allJobs);
+            } catch (error) {
+                console.error('Error loading jobs:', error);
+            }
+        }
+
+        function displayJobs(jobs) {
+            const container = document.getElementById('jobs-list');
+
+            if (jobs.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <h3>No jobs found</h3>
+                        <p>Try adjusting your filters or scrape more jobs</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = '';
+
+            jobs.forEach(job => {
+                const item = document.createElement('div');
+                item.className = 'job-item';
+                if (selectedJobId === job.id) {
+                    item.classList.add('selected');
+                }
+                item.onclick = (e) => selectJob(job.id, e);
+
+                const skillsHTML = job.skills_required.slice(0, 3).map(skill =>
+                    `<span class="skill-tag">${skill}</span>`
+                ).join('');
+
+                let payText = '';
+                if (job.pay_min && job.pay_max) {
+                    const period = job.pay_period || 'year';
+                    if (period === 'hour') {
+                        payText = `$${job.pay_min.toFixed(2)}-${job.pay_max.toFixed(2)}/${period}`;
+                    } else {
+                        payText = `$${job.pay_min.toLocaleString()}-${job.pay_max.toLocaleString()}/${period}`;
+                    }
+                }
+
+                // Format date
+                let dateText = '';
+                if (job.date_posted) {
+                    const date = new Date(job.date_posted);
+                    dateText = `Posted: ${date.toLocaleDateString()}`;
+                } else if (job.date_scraped) {
+                    const date = new Date(job.date_scraped);
+                    dateText = `Scraped: ${date.toLocaleDateString()}`;
+                }
+
+                // Format experience
+                let expText = job.experience_level || 'N/A';
+                if (job.years_experience) {
+                    expText = `${job.years_experience}+ years`;
+                }
+
+                item.innerHTML = `
+                    <h4>${job.title}</h4>
+                    <p><strong>${job.company}</strong> • ${job.location}</p>
+                    <p>${expText} • ${job.employment_type || 'N/A'}</p>
+                    ${payText ? `<p style="color: #0369a1; font-weight: 600;">${payText}</p>` : ''}
+                    ${dateText ? `<p style="color: #999; font-size: 0.75rem;">${dateText}</p>` : ''}
+                    <div class="job-skills">${skillsHTML}</div>
+                `;
+
+                container.appendChild(item);
+            });
+        }
+
+        function selectJob(jobId, event) {
+            selectedJobId = jobId;
+
+            // Update job list selection
+            document.querySelectorAll('.job-item').forEach(item => {
+                item.classList.remove('selected');
+            });
+
+            // Only try to highlight the clicked item if event exists (from job list)
+            if (event && event.currentTarget) {
+                event.currentTarget.classList.add('selected');
+            } else {
+                // If called from graph, find and highlight the job item by ID
+                const jobItems = document.querySelectorAll('.job-item');
+                jobItems.forEach(item => {
+                    if (item.onclick && item.onclick.toString().includes(`selectJob(${jobId}`)) {
+                        item.classList.add('selected');
+                    }
+                });
+            }
+
+            // Highlight node in graph
+            if (network) {
+                network.selectNodes([jobId]);
+                network.focus(jobId, {
+                    scale: 1.5,
+                    animation: {
+                        duration: 1000,
+                        easingFunction: 'easeInOutQuad'
+                    }
+                });
+            }
+
+            // Show details
+            showJobDetails(jobId);
+        }
+
+        async function showJobDetails(jobId) {
+            try {
+                const response = await fetch(`/api/job/${jobId}`);
+                const data = await response.json();
+                const job = data.job;
+                const similarJobs = data.similar_jobs;
+
+                const skillsHTML = job.skills_required.map(skill =>
+                    `<span class="skill-tag">${skill}</span>`
+                ).join('');
+
+                let payHTML = '';
+                if (job.pay_min && job.pay_max) {
+                    const period = job.pay_period || 'year';
+                    if (period === 'hour') {
+                        payHTML = `<div class="pay-range">$${job.pay_min.toFixed(2)} - $${job.pay_max.toFixed(2)}/${period}</div>`;
+                    } else {
+                        payHTML = `<div class="pay-range">$${job.pay_min.toLocaleString()} - $${job.pay_max.toLocaleString()} ${job.pay_currency}/${period}</div>`;
+                    }
+                }
+
+                const similarJobsHTML = similarJobs.length > 0 ?
+                    similarJobs.map(sj => `
+                        <div class="similar-job" onclick="selectJob(${sj.id}, null); closeModal();">
+                            <strong>${sj.title}</strong>
+                            <span class="similarity-score">${(sj.similarity * 100).toFixed(1)}%</span>
+                        </div>
+                    `).join('') :
+                    '<p>No similar jobs found</p>';
+
+                // Format dates
+                let dateInfo = '';
+                if (job.date_posted) {
+                    const date = new Date(job.date_posted);
+                    dateInfo = `<p class="job-info"><strong>Posted:</strong> ${date.toLocaleDateString()}</p>`;
+                }
+                if (job.date_scraped) {
+                    const date = new Date(job.date_scraped);
+                    dateInfo += `<p class="job-info"><strong>Scraped:</strong> ${date.toLocaleDateString()}</p>`;
+                }
+
+                // Format experience for modal
+                let expDisplay = job.experience_level || 'Unknown';
+                if (job.years_experience) {
+                    expDisplay = `${job.experience_level || 'Unknown'} (${job.years_experience}+ years)`;
+                }
+
+                document.getElementById('modal-body').innerHTML = `
+                    <h2>${job.title}</h2>
+                    <p class="job-info"><strong>Company:</strong> ${job.company}</p>
+                    <p class="job-info"><strong>Location:</strong> ${job.location}</p>
+                    <p class="job-info"><strong>Type:</strong> ${job.employment_type} | <strong>Level:</strong> ${expDisplay}</p>
+                    ${dateInfo}
+                    ${payHTML}
+                    <div class="modal-section">
+                        <h3>Required Skills</h3>
+                        <div class="skills-grid">${skillsHTML}</div>
+                    </div>
+                    <a href="${job.url}" target="_blank" class="view-job-btn">View Original Posting</a>
+                    <div class="similar-jobs">
+                        <h3>Similar Jobs</h3>
+                        ${similarJobsHTML}
+                    </div>
+                `;
+
+                document.getElementById('jobModal').style.display = 'block';
+            } catch (error) {
+                console.error('Error loading job details:', error);
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('jobModal').style.display = 'none';
+        }
+
+        window.onclick = function(event) {
+            const modal = document.getElementById('jobModal');
+            if (event.target == modal) {
+                closeModal();
+            }
+        }
+
+        async function applyFilters() {
+            const skills = document.getElementById('filter-skills').value;
+            const location = document.getElementById('filter-location').value;
+            const payMin = document.getElementById('filter-pay-min').value;
+            const payMax = document.getElementById('filter-pay-max').value;
+            const yearsMin = document.getElementById('filter-years-min').value;
+            const yearsMax = document.getElementById('filter-years-max').value;
+
+            const params = new URLSearchParams();
+            if (skills) params.append('skills', skills);
+            if (location) params.append('location', location);
+            if (payMin) params.append('pay_min', payMin);
+            if (payMax) params.append('pay_max', payMax);
+            if (yearsMin) params.append('years_min', yearsMin);
+            if (yearsMax) params.append('years_max', yearsMax);
+
+            try {
+                const response = await fetch('/api/jobs?' + params.toString());
+                allJobs = await response.json();
+                displayJobs(allJobs);
+            } catch (error) {
+                console.error('Error applying filters:', error);
+            }
+        }
+
+        async function loadGraph() {
+            try {
+                const response = await fetch('/api/graph');
+                graphData = await response.json();
+
+                if (!graphData.nodes || graphData.nodes.length === 0) {
+                    document.getElementById('mynetwork').innerHTML = '<div class="graph-empty-state">No jobs to display. Start scraping to see the similarity graph.</div>';
+                    return;
+                }
+
+                updateGraph();
+            } catch (error) {
+                console.error('Error loading graph:', error);
+                document.getElementById('mynetwork').innerHTML = '<div class="graph-empty-state">Error loading graph data</div>';
+            }
+        }
+
+        function updateGraph() {
+            if (!graphData || !graphData.nodes || graphData.nodes.length === 0) {
+                return;
+            }
+
+            const container = document.getElementById('mynetwork');
+
+            // Only clear if network doesn't exist yet (first time)
+            if (!network) {
+                container.innerHTML = '';
+            }
+
+            const threshold = parseFloat(document.getElementById('similarity-threshold').value);
+            document.getElementById('threshold-value').textContent = threshold.toFixed(2);
+
+            const filteredEdges = graphData.edges.filter(edge => edge.value >= threshold);
+
+            const nodes = new vis.DataSet(graphData.nodes.map(node => ({
+                id: node.id,
+                label: node.label.substring(0, 30) + (node.label.length > 30 ? '...' : ''),
+                title: node.title,
+                shape: 'dot',
+                size: 20,
+                font: { size: 12 },
+                color: {
+                    background: '#667eea',
+                    border: '#5568d3',
+                    highlight: {
+                        background: '#764ba2',
+                        border: '#5568d3'
+                    }
+                }
+            })));
+
+            const edges = new vis.DataSet(filteredEdges.map(edge => ({
+                from: edge.from,
+                to: edge.to,
+                value: edge.value,
+                title: edge.title,
+                color: {
+                    color: `rgba(102, 126, 234, ${edge.value})`,
+                    highlight: '#764ba2'
+                }
+            })));
+
+            const data = { nodes, edges };
+            const options = {
+                physics: {
+                    enabled: true,
+                    stabilization: {
+                        iterations: 200
+                    },
+                    barnesHut: {
+                        gravitationalConstant: -8000,
+                        springLength: 150,
+                        springConstant: 0.04
+                    }
+                },
+                interaction: {
+                    hover: true,
+                    tooltipDelay: 100
+                },
+                edges: {
+                    smooth: {
+                        type: 'continuous',
+                        roundness: 0.5
+                    },
+                    width: 2
+                }
+            };
+
+            if (network) {
+                network.setData(data);
+            } else {
+                network = new vis.Network(container, data, options);
+
+                network.on('click', function(params) {
+                    if (params.nodes.length > 0) {
+                        selectJob(params.nodes[0]);
+                    }
+                });
+            }
+        }
+
+        async function loadSavedBoards() {
+            try {
+                const response = await fetch('/api/job-boards');
+                savedBoards = await response.json();
+
+                const select = document.getElementById('saved-boards');
+                // Keep the default option
+                select.innerHTML = '<option value="">-- Select a saved board --</option>';
+
+                savedBoards.forEach(board => {
+                    const option = document.createElement('option');
+                    option.value = board.base_url;
+                    option.textContent = `${board.company_name} (${board.total_jobs_scraped} jobs)`;
+                    select.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Error loading saved boards:', error);
+            }
+        }
+
+        function selectSavedBoard() {
+            const select = document.getElementById('saved-boards');
+            const urlInput = document.getElementById('scrape-url');
+
+            if (select.value) {
+                urlInput.value = select.value;
+            }
+        }
+
+        document.getElementById('similarity-threshold').addEventListener('input', function(e) {
+            updateGraph();
+        });
+    </script>
+</body>
+</html>
