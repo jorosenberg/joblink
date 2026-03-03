@@ -31,6 +31,9 @@ class JobDatabase:
             )
             self.conn.autocommit = False
             self.cursor = self.conn.cursor()
+        elif self.conn.get_transaction_status() == psycopg2.extensions.TRANSACTION_STATUS_INERROR:
+            self.conn.rollback()
+            self.cursor = self.conn.cursor()
         return self
 
     def initialize_tables(self):

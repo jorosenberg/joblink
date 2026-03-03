@@ -33,6 +33,7 @@ def get_db():
             user=secret['username'],
             password=secret['password']
         )
+        _db.initialize_tables()
     return _db
 
 
