@@ -1,0 +1,134 @@
+name: Deploy to AWS
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+env:
+  AWS_REGION: us-east-1
+  TF_VERSION: 1.5.0
+
+  TF_VAR_db_username: ${{ secrets.DB_USERNAME }}
+  TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
+  TF_VAR_scrape_password: ${{ secrets.SCRAPE_PASSWORD }}
+  TF_VAR_hf_token: ${{ secrets.HF_TOKEN }}
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Terraform & Docker Deploy
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: ${{ env.TF_VERSION }}
+        terraform_wrapper: false
+
+    - name: Terraform Init
+      working-directory: terraform
+      run: terraform init
+
+    - name: Terraform Apply (Target ECR)
+      working-directory: terraform
+      run: |
+        terraform apply \
+          -target=aws_ecr_repository.api \
+          -target=aws_ecr_repository.scraper \
+          -target=aws_ecr_repository.analysis \
+          -target=aws_ecr_repository.frontend \
+          -auto-approve
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+
+    - name: Build and Push API Image
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+      run: |
+        docker build --provenance=false \
+          -t $ECR_REGISTRY/jobscraper-api:latest \
+          ./backend/api
+        docker push $ECR_REGISTRY/jobscraper-api:latest
+        echo "::notice::Pushed $ECR_REGISTRY/jobscraper-api:latest"
+
+    - name: Build and Push Scraper Image
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+      run: |
+        docker build --provenance=false \
+          -t $ECR_REGISTRY/jobscraper-scraper:latest \
+          ./backend/scraper
+        docker push $ECR_REGISTRY/jobscraper-scraper:latest
+        echo "::notice::Pushed $ECR_REGISTRY/jobscraper-scraper:latest"
+
+    - name: Build and Push Analysis Image
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+      run: |
+        docker build --provenance=false \
+          --build-arg HF_TOKEN=${{ secrets.HF_TOKEN }} \
+          -t $ECR_REGISTRY/jobscraper-analysis:latest \
+          ./backend/analysis
+        docker push $ECR_REGISTRY/jobscraper-analysis:latest
+        echo "::notice::Pushed $ECR_REGISTRY/jobscraper-analysis:latest"
+
+    - name: Build and Push Frontend Image
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+      run: |
+        docker build --provenance=false \
+          -t $ECR_REGISTRY/jobscraper-frontend:latest \
+          ./frontend
+        docker push $ECR_REGISTRY/jobscraper-frontend:latest
+        echo "::notice::Pushed $ECR_REGISTRY/jobscraper-frontend:latest"
+
+    - name: Terraform Apply (Full Infrastructure)
+      working-directory: terraform
+      run: terraform apply -auto-approve
+
+    - name: Force Lambda Updates
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+      run: |
+        echo "Forcing Lambdas to pull new images..."
+        aws lambda update-function-code \
+          --function-name jobscraper-api \
+          --image-uri $ECR_REGISTRY/jobscraper-api:latest \
+          --publish
+        aws lambda update-function-code \
+          --function-name jobscraper-scraper \
+          --image-uri $ECR_REGISTRY/jobscraper-scraper:latest \
+          --publish
+        aws lambda update-function-code \
+          --function-name jobscraper-analysis \
+          --image-uri $ECR_REGISTRY/jobscraper-analysis:latest \
+          --publish
+        echo "All Lambdas updated successfully."
+
+    - name: Output URLs
+      working-directory: terraform
+      run: |
+        terraform refresh
+
+        echo "Deployment Complete!"
+        echo "API Gateway URL: $(terraform output -raw api_gateway_url)"
+        echo "Frontend URL: http://$(terraform output -raw frontend_public_ip)"
