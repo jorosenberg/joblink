@@ -5,7 +5,7 @@ ENV MPLCONFIGDIR=/tmp
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --only-binary=:all: -r requirements.txt
 
 ARG HF_TOKEN
 ENV HUGGING_FACE_HUB_TOKEN=${HF_TOKEN}
