@@ -187,7 +187,7 @@ def run_scrape_pipeline(event):
                 current_job=job['title']
             )
 
-        if jobs_added > 0 and company_name:
+        if (jobs_added + duplicates_skipped) > 0 and company_name:
             db.save_job_board(company_name, url, jobs_added)
 
         if jobs_added >= 2:

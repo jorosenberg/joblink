@@ -2,6 +2,7 @@ import json
 import os
 import boto3
 import logging
+import datetime
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -42,11 +43,18 @@ def get_scrape_password():
     return _scrape_password
 
 
+class _DateTimeEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, (datetime.datetime, datetime.date)):
+            return obj.isoformat()
+        return super().default(obj)
+
+
 def response(status_code, body):
     return {
         'statusCode': status_code,
         'headers': {'Content-Type': 'application/json'},
-        'body': json.dumps(body)
+        'body': json.dumps(body, cls=_DateTimeEncoder)
     }
 
 
