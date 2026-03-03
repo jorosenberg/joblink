@@ -7,7 +7,7 @@ output "frontend_public_ip" {
 }
 
 output "rds_endpoint" {
-  value     = aws_db_instance.postgres.address
+  value     = aws_db_instance.jobsdb.address
   sensitive = true
 }
 

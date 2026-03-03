@@ -9,7 +9,7 @@ resource "aws_lambda_function" "api" {
   environment {
     variables = {
       DB_SECRET_ARN       = aws_secretsmanager_secret.db_credentials.arn
-      DB_HOST             = aws_db_instance.postgres.address
+      DB_HOST             = aws_db_instance.jobsdb.address
       DB_NAME             = "jobscraper"
       SCRAPE_PASSWORD_ARN = aws_secretsmanager_secret.scrape_password.arn
     }
@@ -29,7 +29,7 @@ resource "aws_lambda_function" "scraper" {
   environment {
     variables = {
       DB_SECRET_ARN        = aws_secretsmanager_secret.db_credentials.arn
-      DB_HOST              = aws_db_instance.postgres.address
+      DB_HOST              = aws_db_instance.jobsdb.address
       DB_NAME              = "jobscraper"
       ANALYSIS_LAMBDA_NAME = "${local.project_name}-analysis"
       SCRAPE_PASSWORD_ARN  = aws_secretsmanager_secret.scrape_password.arn
@@ -53,7 +53,7 @@ resource "aws_lambda_function" "analysis" {
   environment {
     variables = {
       DB_SECRET_ARN = aws_secretsmanager_secret.db_credentials.arn
-      DB_HOST       = aws_db_instance.postgres.address
+      DB_HOST       = aws_db_instance.jobsdb.address
       DB_NAME       = "jobscraper"
       HF_TOKEN_ARN  = aws_secretsmanager_secret.hf_token.arn
     }
