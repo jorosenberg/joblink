@@ -1,8 +1,9 @@
 FROM public.ecr.aws/lambda/python:3.11
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+ENV JOBLIB_TEMP_FOLDER=/tmp
+ENV MPLCONFIGDIR=/tmp
 
-COPY handler.py scraper.py parser.py database.py ./
+COPY package/ ${LAMBDA_TASK_ROOT}/
+COPY handler.py scraper.py parser.py database.py ${LAMBDA_TASK_ROOT}/
 
 CMD ["handler.handler"]
