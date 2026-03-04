@@ -54,6 +54,60 @@ class JobSimilarityAnalyzer:
 
         return float(dot_product / (norm1 * norm2))
 
+    def compute_pairwise_similarities_vectorized(self, embeddings: np.ndarray) -> np.ndarray:
+        try:
+            from scipy.spatial.distance import pdist, squareform
+            distances = pdist(embeddings, metric='cosine')
+            similarities = 1 - squareform(distances)
+            return similarities
+        except ImportError:
+            logger.warning("scipy not available, falling back to manual computation")
+            return None
+
+    def compute_batch_similarities(self, db, batch_job_ids: List[int]):
+        logger.info(f"Computing batch similarities for {len(batch_job_ids)} new jobs...")
+        
+        batch_embeddings = []
+        batch_mapping = []
+        
+        for job_id in batch_job_ids:
+            embedding_bytes = db.get_embedding(job_id)
+            if embedding_bytes:
+                embedding = pickle.loads(embedding_bytes)
+                batch_embeddings.append(embedding)
+                batch_mapping.append(job_id)
+        
+        if not batch_embeddings:
+            logger.warning("No embeddings found for batch jobs")
+            return
+        
+        all_jobs = db.get_all_jobs()
+        all_embeddings = []
+        all_job_ids = []
+        
+        for job in all_jobs:
+            embedding_bytes = db.get_embedding(job['id'])
+            if embedding_bytes:
+                embedding = pickle.loads(embedding_bytes)
+                all_embeddings.append(embedding)
+                all_job_ids.append(job['id'])
+        
+        if not all_embeddings:
+            logger.warning("No embeddings available")
+            return
+        
+        similarities_computed = 0
+        for i, batch_job_id in enumerate(batch_mapping):
+            batch_emb = batch_embeddings[i]
+            for j, all_job_id in enumerate(all_job_ids):
+                if batch_job_id != all_job_id:
+                    all_emb = all_embeddings[j]
+                    similarity = self.cosine_similarity(batch_emb, all_emb)
+                    db.save_similarity(batch_job_id, all_job_id, similarity)
+                    similarities_computed += 1
+        
+        logger.info(f"Computed {similarities_computed} similarity pairs for batch")
+
     def compute_all_similarities(self, db):
         logger.info("Computing job similarities...")
 
@@ -92,3 +146,4 @@ class JobSimilarityAnalyzer:
                 similarities_computed += 1
 
         logger.info(f"Computed {similarities_computed} similarity pairs")
+
