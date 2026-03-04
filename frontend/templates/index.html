@@ -503,7 +503,7 @@
                 </select>
             </div>
             <div class="form-group">
-                <label>Job Board URL</label>
+                <label>Job Board URL(s) <small>(comma-separated for batch)</small></label>
                 <input type="text" id="scrape-url" placeholder="https://boards.greenhouse.io/..." required>
             </div>
             <div class="form-group">
@@ -608,25 +608,40 @@
         function startScraping(event) {
             event.preventDefault();
 
-            const url = document.getElementById('scrape-url').value;
+            const rawUrl = document.getElementById('scrape-url').value.trim();
             const limit = document.getElementById('scrape-limit').value;
             const location = document.getElementById('scrape-location').value;
             const skills = document.getElementById('scrape-skills').value;
             const password = document.getElementById('scrape-password').value;
 
-            fetch(API_BASE_URL + '/api/scrape', {
+            // Split comma-separated URLs and trim whitespace
+            const urls = rawUrl.split(',').map(u => u.trim()).filter(u => u);
+            const endpoint = urls.length > 1 ? '/api/scrape/batch' : '/api/scrape';
+            let payload;
+
+            if (urls.length > 1) {
+                // Build array of url objects using same limit/location/skills for batch
+                payload = { 
+                    urls: urls.map(u => ({ url: u, limit, location, skills })),
+                    password 
+                };
+            } else {
+                payload = { url: urls[0], limit, location, skills, password };
+            }
+
+            fetch(API_BASE_URL + endpoint, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ url, limit, location, skills, password })
+                body: JSON.stringify(payload)
             })
             .then(response => response.json())
             .then(data => {
                 if (data.error) {
                     alert(data.error);
                 } else {
-                    currentScrapeId = data.scrape_id;
+                    currentScrapeId = data.scrape_id || data.batch_id;
                     document.getElementById('status-bar').classList.add('active');
                     document.getElementById('scrape-btn').disabled = true;
                     startStatusChecking();

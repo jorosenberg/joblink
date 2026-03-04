@@ -78,8 +78,19 @@ class SeleniumJobScraper:
         search_keywords = ['search', 'software engineering', 'keyword', 'find', 'job title', 'skills']
         exclude_keywords = ['scroll', 'pagination', 'results', 'page', 'filter', 'location', 'city', 'place', 'where', 'area', 'region']
 
+        # Debug: Log all available inputs
+
+
         try:
             inputs = driver.find_elements(By.TAG_NAME, 'input')
+
+            for input_elem in inputs:
+                element_class = input_elem.get_attribute('class') or ''
+                if 'typeahead' in element_class.lower() or 'autocomplete' in element_class.lower():
+                    placeholder = input_elem.get_attribute('placeholder') or ''
+                    if 'location' not in placeholder.lower():
+                        print(f"    Found typeahead input with class: '{element_class}'")
+                        return input_elem
 
             for input_elem in inputs:
                 name = input_elem.get_attribute('name') or ''
@@ -98,6 +109,91 @@ class SeleniumJobScraper:
                 if input_type and input_type.lower() == 'search':
                     print(f"    Found input with type='search' (id: '{element_id or name}')")
                     return input_elem
+
+            for input_elem in inputs:
+                name = input_elem.get_attribute('name') or ''
+                element_id = input_elem.get_attribute('id') or ''
+                element_class = input_elem.get_attribute('class') or ''
+                placeholder = input_elem.get_attribute('placeholder') or ''
+
+                combined = (name + ' ' + element_id + ' ' + element_class + ' ' + placeholder).lower()
+                if any(exclude in combined for exclude in ['location', 'city', 'place', 'where', 'area', 'region']):
+                    continue
+
+                if any(exclude in name.lower() or exclude in element_id.lower() for exclude in ['scroll', 'pagination', 'results', 'page', 'filter']):
+                    continue
+
+                if 'globalnav' in element_class.lower():
+                    continue
+
+                if 'search' in element_class.lower() and ('keyword' in element_class.lower() or 'input' in element_class.lower() or 'field' in element_class.lower()):
+                    print(f"    Found input with search class: '{element_class}'")
+                    return input_elem
+
+            for input_elem in inputs:
+                name = input_elem.get_attribute('name') or ''
+                element_id = input_elem.get_attribute('id') or ''
+                placeholder = input_elem.get_attribute('placeholder') or ''
+                element_class = input_elem.get_attribute('class') or ''
+
+                combined = (name + ' ' + element_id + ' ' + element_class + ' ' + placeholder).lower()
+                if any(exclude in combined for exclude in ['location', 'city', 'place', 'where', 'area', 'region']):
+                    continue
+
+                if any(exclude in name.lower() or exclude in element_id.lower() for exclude in ['scroll', 'pagination', 'results', 'page', 'filter']):
+                    continue
+
+                if placeholder:
+                    placeholder_lower = placeholder.lower()
+                    if any(keyword in placeholder_lower for keyword in search_keywords):
+                        print(f"    Found input with placeholder: '{placeholder}'")
+                        return input_elem
+
+            for input_elem in inputs:
+                name = input_elem.get_attribute('name') or ''
+                element_id = input_elem.get_attribute('id') or ''
+                aria_label = input_elem.get_attribute('aria-label') or ''
+                placeholder = input_elem.get_attribute('placeholder') or ''
+                element_class = input_elem.get_attribute('class') or ''
+
+                combined = (name + ' ' + element_id + ' ' + element_class + ' ' + placeholder + ' ' + aria_label).lower()
+                if any(exclude in combined for exclude in ['location', 'city', 'place', 'where', 'area', 'region']):
+                    continue
+
+                if any(exclude in name.lower() or exclude in element_id.lower() for exclude in ['scroll', 'pagination', 'results', 'page', 'filter']):
+                    continue
+
+                if aria_label:
+                    aria_label_lower = aria_label.lower()
+                    if any(keyword in aria_label_lower for keyword in search_keywords):
+                        print(f"    Found input with aria-label: '{aria_label}'")
+                        return input_elem
+
+            for input_elem in inputs:
+                name = input_elem.get_attribute('name') or ''
+                element_id = input_elem.get_attribute('id') or ''
+                placeholder = input_elem.get_attribute('placeholder') or ''
+                element_class = input_elem.get_attribute('class') or ''
+
+                combined = (name + ' ' + element_id + ' ' + element_class + ' ' + placeholder).lower()
+                if any(exclude in combined for exclude in ['location', 'city', 'place', 'where', 'area', 'region']):
+                    continue
+
+                if any(exclude in name.lower() or exclude in element_id.lower() for exclude in ['scroll', 'pagination', 'results', 'page', 'filter']):
+                    continue
+
+                if name:
+                    name_lower = name.lower()
+                    if any(keyword in name_lower for keyword in search_keywords):
+                        print(f"    Found input with name: '{name}'")
+                        return input_elem
+
+            print("    No search input found")
+            return None
+
+        except Exception as e:
+            print(f"    Error finding search input: {e}")
+            return None
 
             for input_elem in inputs:
                 name = input_elem.get_attribute('name') or ''
@@ -949,10 +1045,13 @@ class SeleniumJobScraper:
 
                 input_value = search_input.get_attribute('value')
                 if not input_value or keyword_string not in input_value:
-                    print(f"    Value not set properly (got: '{input_value}'), using JavaScript...")
+                    print(f"    Value not set properly (got: '{input_value}'), using JavaScript with additional events...")
                     driver.execute_script("arguments[0].value = arguments[1];", search_input, keyword_string)
+                    # Dispatch multiple events for React/Vue compatibility
                     driver.execute_script("arguments[0].dispatchEvent(new Event('input', { bubbles: true }));", search_input)
-                    time.sleep(0.3)
+                    driver.execute_script("arguments[0].dispatchEvent(new Event('change', { bubbles: true }));", search_input)
+                    driver.execute_script("arguments[0].dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));", search_input)
+                    time.sleep(0.5)
 
                 location_input = None
                 if self.location:
@@ -972,10 +1071,12 @@ class SeleniumJobScraper:
 
                         location_value = location_input.get_attribute('value')
                         if not location_value or self.location not in location_value:
-                            print(f"    Location value not set properly, using JavaScript...")
+                            print(f"    Location value not set properly, using JavaScript with additional events...")
                             driver.execute_script("arguments[0].value = arguments[1];", location_input, self.location)
                             driver.execute_script("arguments[0].dispatchEvent(new Event('input', { bubbles: true }));", location_input)
-                            time.sleep(0.3)
+                            driver.execute_script("arguments[0].dispatchEvent(new Event('change', { bubbles: true }));", location_input)
+                            driver.execute_script("arguments[0].dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));", location_input)
+                            time.sleep(0.5)
 
                         print("    Location filter applied successfully")
 

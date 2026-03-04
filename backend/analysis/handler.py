@@ -53,12 +53,21 @@ def get_analyzer():
 
 def handler(event, context):
     scrape_id = event.get('scrape_id')
+    batch_id = event.get('batch_id')
+    job_ids = event.get('job_ids', [])
     db = get_db()
 
     try:
         logger.info("Starting similarity analysis...")
         analyzer = get_analyzer()
-        analyzer.compute_all_similarities(db)
+        
+        # If specific job IDs provided (batch mode), only analyze those
+        if job_ids:
+            logger.info(f"Analyzing {len(job_ids)} new jobs from batch {batch_id}")
+            analyzer.compute_batch_similarities(db, job_ids)
+        else:
+            # Original mode: analyze all jobs
+            analyzer.compute_all_similarities(db)
 
         if scrape_id:
             jobs_added = 0
