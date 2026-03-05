@@ -146,8 +146,10 @@ class JobScraper:
         if params:
             separator = '&' if '?' in self.base_url else '?'
             search_url = f"{self.base_url}{separator}{'&'.join(params)}"
-    
-        search_url += '&page=1'
+
+        if 'greenhouse.io' in self.base_url.lower() and 'page=' not in search_url:
+            search_url += '&page=1'
+            
         return search_url
 
     def scrape(self):
