@@ -72,10 +72,21 @@ class JobScraper:
                 has_next_page = True
                 logger.info("Fetching next page of Greenhouse board...")
                 new_url = self.build_search_url()
-                new_url = new_url[:-1] + str(current_page + 1)
+                if '&page=' in new_url:
+                    new_url = re.sub(r'&page=\d+', f'&page={current_page + 1}', new_url)
+                elif '?page=' in new_url:
+                    new_url = re.sub(r'\?page=\d+', f'?page={current_page + 1}', new_url)
+                else:
+                    new_url += f'&page={current_page + 1}'
+                
                 new_html_content = self.fetch_page(new_url)
-                soup = BeautifulSoup(new_html_content, 'html.parser')
-                all_links = soup.find_all('a', href=True)
+                if new_html_content:
+                    soup = BeautifulSoup(new_html_content, 'html.parser')
+                    all_links = soup.find_all('a', href=True)
+                    current_page += 1
+                else:
+                    logger.warning("Failed to fetch next page, stopping pagination")
+                    has_next_page = False
             else:
                 has_next_page = False
                 break
