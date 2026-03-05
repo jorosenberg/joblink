@@ -37,7 +37,6 @@ class JobScraper:
             return None
 
     def parse_greenhouse_board(self, html_content):
-        next_page = False
         soup = BeautifulSoup(html_content, 'html.parser')
         company_match = re.search(r'greenhouse\.io/([^/?]+)', self.base_url)
         if not company_match:
@@ -47,28 +46,41 @@ class JobScraper:
         all_links = soup.find_all('a', href=True)
         job_data = []
         seen_urls = set()
+        has_next_page = True
+        current_page = 1
 
-        for link_tag in all_links:
-            href = link_tag.get('href')
-            job_match = re.search(r'/jobs/(\d+)', href)
-            if job_match:
-                job_id = job_match.group(1)
-                if href.startswith('http'):
-                    full_url = href
-                else:
-                    full_url = f"https://job-boards.greenhouse.io/{company}/jobs/{job_id}"
+        while has_next_page:
+            for link_tag in all_links:
+                href = link_tag.get('href')
+                job_match = re.search(r'/jobs/(\d+)', href)
+                if job_match:
+                    job_id = job_match.group(1)
+                    if href.startswith('http'):
+                        full_url = href
+                    else:
+                        full_url = f"https://job-boards.greenhouse.io/{company}/jobs/{job_id}"
 
-                if full_url in seen_urls:
-                    continue
-                seen_urls.add(full_url)
+                    if full_url in seen_urls:
+                        continue
+                    seen_urls.add(full_url)
 
-                title = link_tag.get_text(strip=True)
-                if title and full_url:
-                    job_data.append({'title': title, 'url': full_url})
-    
-        if soup.find('button', attrs={'aria-label': 'Next page', 'aria-disabled': 'false'}): next_page = True
+                    title = link_tag.get_text(strip=True)
+                    if title and full_url:
+                        job_data.append({'title': title, 'url': full_url})
 
-        return job_data, next_page
+            if soup.find('button', attrs={'aria-label': 'Next page', 'aria-disabled': 'false'}):
+                has_next_page = True
+                logger.info("Fetching next page of Greenhouse board...")
+                new_url = self.build_search_url()
+                new_url = new_url[:-1] + str(current_page + 1)
+                new_html_content = self.fetch_page(new_url)
+                soup = BeautifulSoup(new_html_content, 'html.parser')
+                all_links = soup.find_all('a', href=True)
+            else:
+                has_next_page = False
+                break
+
+        return job_data
 
     def parse_lever_board(self, html_content):
         soup = BeautifulSoup(html_content, 'html.parser')
@@ -158,15 +170,7 @@ class JobScraper:
         if is_lever:
             jobs = self.parse_lever_board(html_content)
         else:
-            jobs = []
-            next_page = True
-            while next_page:
-                jobs_page, next_page = self.parse_greenhouse_board(html_content)
-                jobs.extend(jobs_page)
-                logger.info("Fetching next page of Greenhouse board...")
-                page_number = search_url[-1]
-                search_url = search_url[:-1] + str(int(page_number) + 1)
-                html_content = self.fetch_page(search_url)
+            jobs = self.parse_greenhouse_board(html_content)
 
         logger.info(f"Found {len(jobs)} jobs")
 
