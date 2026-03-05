@@ -71,6 +71,8 @@ class JobScraper:
             if soup.find('button', attrs={'aria-label': 'Next page', 'aria-disabled': 'false'}):
                 has_next_page = True
                 logger.info("Fetching next page of Greenhouse board...")
+                if 'page=' not in search_url:
+                    search_url = search_url + '&page=1'
                 new_url = search_url[:-1] + str(current_page + 1)
                 new_html_content = self.fetch_page(new_url)
                 soup = BeautifulSoup(new_html_content, 'html.parser')
@@ -147,9 +149,9 @@ class JobScraper:
             separator = '&' if '?' in self.base_url else '?'
             search_url = f"{self.base_url}{separator}{'&'.join(params)}"
 
-        if 'greenhouse.io' in self.base_url.lower() and 'page=' not in search_url:
+        if 'greenhouse.io' in self.base_url.lower() and 'page=' not in search_url and keyword in search_url:
             search_url += '&page=1'
-            
+
         return search_url
 
     def scrape(self):

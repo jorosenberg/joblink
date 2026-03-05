@@ -148,7 +148,7 @@ The `JobSimilarityAnalyzer` (backend/analysis/handler.py) implements NLP-powered
 
 **Lambda Functions** (3 containerized microservices):
 
-1. **API Lambda** (256MB, 30s timeout): Handles REST endpoint requests routed via API Gateway. Manages read operations (GET /api/jobs, /api/job/{id}), deletes (requires authentication), and similarity graph queries. Maintains a persistent database connection across warm invocations for efficiency.
+1. **API Lambda** (512MB, 30s timeout): Handles REST endpoint requests routed via API Gateway. Manages read operations (GET /api/jobs, /api/job/{id}), deletes (requires authentication), and similarity graph queries. Maintains a persistent database connection across warm invocations for efficiency.
 
 2. **Scraper Lambda** (512MB, 15-min timeout): Orchestrates job extraction from multiple boards. Dispatches requests to either the fast HTTP scraper (Greenhouse/Lever) or delegates to the EC2 frontend for complex JavaScript-heavy sites. Tracks scraping progress via database status records. Auto-invokes the Analysis Lambda upon completion.
 
