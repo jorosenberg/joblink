@@ -36,7 +36,7 @@ class JobScraper:
             logger.error(f"Failed to fetch {url[:80]}: {e}")
             return None
 
-    def parse_greenhouse_board(self, html_content):
+    def parse_greenhouse_board(self, search_url, html_content):
         soup = BeautifulSoup(html_content, 'html.parser')
         company_match = re.search(r'greenhouse\.io/([^/?]+)', self.base_url)
         if not company_match:
@@ -71,22 +71,10 @@ class JobScraper:
             if soup.find('button', attrs={'aria-label': 'Next page', 'aria-disabled': 'false'}):
                 has_next_page = True
                 logger.info("Fetching next page of Greenhouse board...")
-                new_url = self.build_search_url()
-                if '&page=' in new_url:
-                    new_url = re.sub(r'&page=\d+', f'&page={current_page + 1}', new_url)
-                elif '?page=' in new_url:
-                    new_url = re.sub(r'\?page=\d+', f'?page={current_page + 1}', new_url)
-                else:
-                    new_url += f'&page={current_page + 1}'
-                
+                new_url = search_url[:-1] + str(current_page + 1)
                 new_html_content = self.fetch_page(new_url)
-                if new_html_content:
-                    soup = BeautifulSoup(new_html_content, 'html.parser')
-                    all_links = soup.find_all('a', href=True)
-                    current_page += 1
-                else:
-                    logger.warning("Failed to fetch next page, stopping pagination")
-                    has_next_page = False
+                soup = BeautifulSoup(new_html_content, 'html.parser')
+                all_links = soup.find_all('a', href=True)
             else:
                 has_next_page = False
                 break
@@ -158,9 +146,8 @@ class JobScraper:
         if params:
             separator = '&' if '?' in self.base_url else '?'
             search_url = f"{self.base_url}{separator}{'&'.join(params)}"
-            if not is_lever:
-                search_url = f"{search_url}&page=1"
-
+    
+        search_url += '&page=1'
         return search_url
 
     def scrape(self):
@@ -181,7 +168,7 @@ class JobScraper:
         if is_lever:
             jobs = self.parse_lever_board(html_content)
         else:
-            jobs = self.parse_greenhouse_board(html_content)
+            jobs = self.parse_greenhouse_board(search_url, html_content)
 
         logger.info(f"Found {len(jobs)} jobs")
 
