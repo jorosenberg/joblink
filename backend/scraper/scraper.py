@@ -136,7 +136,7 @@ class JobScraper:
             separator = '&' if '?' in self.base_url else '?'
             search_url = f"{self.base_url}{separator}{'&'.join(params)}"
             if not is_lever:
-                search_url += "&page=1"
+                search_url = f"{search_url}&page=1"
 
         return search_url
 
@@ -165,7 +165,7 @@ class JobScraper:
                 jobs.extend(jobs_page)
                 logger.info("Fetching next page of Greenhouse board...")
                 page_number = search_url[-1]
-                search_url = f"{search_url[:-1]}{int(page_number) + 1}"
+                search_url = search_url[:-1] + str(int(page_number) + 1)
                 html_content = self.fetch_page(search_url)
 
         logger.info(f"Found {len(jobs)} jobs")
