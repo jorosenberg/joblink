@@ -275,9 +275,6 @@ The GitHub Actions workflow implements a 3-stage deployment process triggered on
 
 ### Local Development Workflow
 
-**CLI Scraper (`local/main.py`)**:
-The command-line tool provides interactive scraping for local testing. It guides you through 3 prompts: job board URL (Greenhouse, Lever, or any site), number of jobs to scrape (auto-continues past duplicates to reach target), and optional comma-separated skill filters. The script orchestrates the complete pipeline: fetches job pages, parses structured data (title, company, location, salary, skills), deduplicates by URL, stores in local SQLite, computes embeddings using the Sentence-BERT model, and calculates pairwise similarities. Progress updates print to console at each step.
-
 **Web Dashboard (`frontend/app.py`)**:
 Flask application serving the interactive UI on localhost:5000. Provides two tabs: **Job List** (card grid with search/filter by skills, location, salary; click any card for full details including similar jobs) and **Similarity Graph** (force-directed network visualization using vis.js with nodes representing jobs and edges showing similarity relationships). Both tabs pull live data from API endpoints (either local database or AWS Lambda functions).
 
@@ -312,22 +309,6 @@ Flask application serving the interactive UI on localhost:5000. Provides two tab
 - **Project Management**: Multi-service coordination, deployment automation, documentation
 - **Quality Assurance**: Testing strategies, error handling, monitoring implementation
 - **Continuous Learning**: Emerging technologies (serverless, ML), cloud best practices
-
----
-
-## 📚 Documentation & Resources
-
-### Technical Documentation
-- **[Complete Architecture Guide](local/reference.txt)** - Detailed system design and implementation
-- **[Batch Scraping Guide](BATCH_SCRAPING_GUIDE.md)** - Advanced scraping features and patterns
-- **[Terraform Documentation](terraform/README.md)** - Infrastructure setup and configuration
-- **[API Reference](backend/api/README.md)** - Complete endpoint documentation with examples
-
-### Code Quality
-- **Type Hints**: Comprehensive Python type annotations
-- **Error Handling**: Robust exception handling and logging
-- **Code Organization**: Modular design with clear separation of concerns
-- **Documentation**: Inline comments and docstrings throughout
 
 ---
 
