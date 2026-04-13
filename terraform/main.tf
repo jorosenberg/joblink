@@ -7,7 +7,7 @@ terraform {
     }
   }
   backend "s3" {
-    bucket         = "jobscraper-tfstate"
+    bucket         = "jobscraper-tf-state"
     key            = "terraform.tfstate"
     region         = "us-east-1"
     dynamodb_table = "jobscraper-terraform-lock"
