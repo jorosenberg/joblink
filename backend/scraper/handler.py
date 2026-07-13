@@ -1,7 +1,6 @@
 import json
 import os
 import uuid
-import boto3
 import logging
 from datetime import datetime
 
@@ -13,6 +12,7 @@ _scrape_password = None
 
 
 def get_secret(secret_arn):
+    import boto3  # legacy AWS fallback only
     client = boto3.client('secretsmanager')
     response = client.get_secret_value(SecretId=secret_arn)
     secret = response['SecretString']
@@ -26,7 +26,11 @@ def get_db():
     global _db
     if _db is None:
         from database import JobDatabase
-        secret = get_secret(os.environ['DB_SECRET_ARN'])
+        # Env-first (Neon/any Postgres); Secrets Manager only as legacy fallback.
+        if os.environ.get('DB_USER') and os.environ.get('DB_PASSWORD'):
+            secret = {'username': os.environ['DB_USER'], 'password': os.environ['DB_PASSWORD']}
+        else:
+            secret = get_secret(os.environ['DB_SECRET_ARN'])
         _db = JobDatabase(
             host=os.environ['DB_HOST'],
             dbname=os.environ['DB_NAME'],
@@ -40,8 +44,57 @@ def get_db():
 def get_scrape_password():
     global _scrape_password
     if _scrape_password is None:
-        _scrape_password = get_secret(os.environ['SCRAPE_PASSWORD_ARN'])
+        if os.environ.get('SCRAPE_PASSWORD'):
+            _scrape_password = os.environ['SCRAPE_PASSWORD']
+        else:
+            _scrape_password = get_secret(os.environ['SCRAPE_PASSWORD_ARN'])
     return _scrape_password
+
+
+def invoke_self_async(payload, context):
+    """Fire-and-forget re-invocation of this service.
+
+    Server mode (SERVER_MODE=1, e.g. Hugging Face Space): a daemon thread -
+    identical semantics to Lambda's InvocationType='Event' self-invoke.
+    Lambda mode: original boto3 self-invoke.
+    """
+    if os.environ.get('SERVER_MODE'):
+        import threading
+        threading.Thread(target=handler, args=(payload, None), daemon=True).start()
+        return
+    import boto3
+    lambda_client = boto3.client('lambda')
+    lambda_client.invoke(
+        FunctionName=context.function_name,
+        InvocationType='Event',
+        Payload=json.dumps(payload)
+    )
+
+
+def invoke_analysis_async(payload):
+    """Fire-and-forget invocation of the analysis service.
+
+    Server mode: HTTP POST to ANALYSIS_URL (the analysis Space answers 202
+    immediately and processes in the background). Generous timeout tolerates
+    a sleeping Space waking up. Lambda mode: original boto3 Event invoke.
+    """
+    analysis_url = os.environ.get('ANALYSIS_URL', '')
+    if analysis_url:
+        import urllib.request
+        req = urllib.request.Request(
+            analysis_url,
+            data=json.dumps(payload).encode('utf-8'),
+            headers={'Content-Type': 'application/json'}
+        )
+        urllib.request.urlopen(req, timeout=180)
+        return
+    import boto3
+    lambda_client = boto3.client('lambda')
+    lambda_client.invoke(
+        FunctionName=os.environ['ANALYSIS_LAMBDA_NAME'],
+        InvocationType='Event',
+        Payload=json.dumps(payload)
+    )
 
 
 def response(status_code, body):
@@ -79,16 +132,11 @@ def handler(event, context):
         db = get_db()
         
         # Start batch scraping async
-        lambda_client = boto3.client('lambda')
-        lambda_client.invoke(
-            FunctionName=context.function_name,
-            InvocationType='Event',
-            Payload=json.dumps({
-                'source': 'async_batch_scrape',
-                'batch_id': batch_id,
-                'urls': urls_input
-            })
-        )
+        invoke_self_async({
+            'source': 'async_batch_scrape',
+            'batch_id': batch_id,
+            'urls': urls_input
+        }, context)
         
         return response(200, {
             'message': 'Batch scraping started',
@@ -143,19 +191,14 @@ def handler(event, context):
             db.update_scrape_status(scrape_id, status='error', message='Selenium not available in Lambda')
             return response(400, {'error': 'This URL requires Selenium (only Greenhouse/Lever supported via Lambda)'})
 
-    lambda_client = boto3.client('lambda')
-    lambda_client.invoke(
-        FunctionName=context.function_name,
-        InvocationType='Event',
-        Payload=json.dumps({
-            'source': 'async_scrape',
-            'scrape_id': scrape_id,
-            'url': url,
-            'limit': limit,
-            'location': location,
-            'skills': skills
-        })
-    )
+    invoke_self_async({
+        'source': 'async_scrape',
+        'scrape_id': scrape_id,
+        'url': url,
+        'limit': limit,
+        'location': location,
+        'skills': skills
+    }, context)
 
     return response(200, {
         'message': 'Scraping started',
@@ -228,12 +271,7 @@ def run_scrape_pipeline(event):
         if jobs_added >= 2:
             db.update_scrape_status(scrape_id, status='analyzing', message='Computing similarities...')
             try:
-                lambda_client = boto3.client('lambda')
-                lambda_client.invoke(
-                    FunctionName=os.environ['ANALYSIS_LAMBDA_NAME'],
-                    InvocationType='Event',
-                    Payload=json.dumps({'scrape_id': scrape_id})
-                )
+                invoke_analysis_async({'scrape_id': scrape_id})
             except Exception as e:
                 logger.error(f"Failed to invoke analysis: {e}")
                 db.update_scrape_status(
@@ -334,12 +372,7 @@ def run_batch_scrape_pipeline(event):
         if all_new_job_ids:
             logger.info(f"Batch complete: {total_jobs_added} jobs added. Starting analysis...")
             try:
-                lambda_client = boto3.client('lambda')
-                lambda_client.invoke(
-                    FunctionName=os.environ['ANALYSIS_LAMBDA_NAME'],
-                    InvocationType='Event',
-                    Payload=json.dumps({'batch_id': batch_id, 'job_ids': all_new_job_ids})
-                )
+                invoke_analysis_async({'batch_id': batch_id, 'job_ids': all_new_job_ids})
             except Exception as e:
                 logger.error(f"Failed to invoke analysis: {e}")
         
@@ -349,4 +382,3 @@ def run_batch_scrape_pipeline(event):
         logger.error(f"Batch scrape error: {str(e)}")
     
     return {'statusCode': 200}
-

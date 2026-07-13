@@ -17,6 +17,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app.py database.py selenium_scraper.py parser.py ./
 COPY templates/ templates/
 
-EXPOSE 80
-
-CMD ["gunicorn", "-b", "0.0.0.0:80", "-w", "2", "--timeout", "300", "app:app"]
+# Render injects PORT (10000); HF Space uses 7860 (README app_port);
+# plain docker run keeps working via the default.
+EXPOSE 7860
+CMD gunicorn -b 0.0.0.0:${PORT:-7860} -w 2 --timeout 300 app:app
