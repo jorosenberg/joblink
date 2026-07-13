@@ -10,5 +10,5 @@ routes = [
 ]
 
 [vars]
-API_ORIGIN = "REPLACE_WITH_API_SPACE_URL"
-SCRAPER_ORIGIN = "REPLACE_WITH_SCRAPER_SPACE_URL"
+API_ORIGIN = "https://joblink-api.onrender.com"
+SCRAPER_ORIGIN = "https://joblink-scraper.onrender.com"
