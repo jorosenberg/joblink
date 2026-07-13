@@ -14,12 +14,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with: { ref: free-hosting }
+        with:
+          ref: free-hosting
       - uses: actions/setup-python@v5
-        with: { python-version: "3.11" }
+        with:
+          python-version: "3.11"
       - run: pip install psycopg2-binary
       - name: Download and reassemble jobs.db from release
-        env: { GH_TOKEN: ${{ github.token }} }
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           gh release download "${{ inputs.release_tag }}" --pattern 'jobs.db.gz.part-*' --repo "${{ github.repository }}"
           cat jobs.db.gz.part-* | gunzip > jobs.db
@@ -30,12 +33,7 @@ jobs:
           NEON_DB_HOST: ${{ secrets.NEON_DB_HOST }}
           NEON_DB_USER: ${{ secrets.NEON_DB_USER }}
           NEON_DB_PASS: ${{ secrets.NEON_DB_PASS }}
-        run: |
-          PYTHONPATH=backend/shared python -c "
-import os
-from database import JobDatabase
-JobDatabase(os.environ['NEON_DB_HOST'], 'jobsdb', os.environ['NEON_DB_USER'], os.environ['NEON_DB_PASS']).initialize_tables()
-print('schema ready')"
+        run: PYTHONPATH=backend/shared python -c "import os; from database import JobDatabase; JobDatabase(os.environ['NEON_DB_HOST'], 'jobsdb', os.environ['NEON_DB_USER'], os.environ['NEON_DB_PASS']).initialize_tables(); print('schema ready')"
       - name: Run migration
         env:
           PG_HOST: ${{ secrets.NEON_DB_HOST }}
