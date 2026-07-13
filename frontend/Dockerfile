@@ -17,7 +17,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app.py database.py selenium_scraper.py parser.py ./
 COPY templates/ templates/
 
-# Render injects PORT (10000); HF Space uses 7860 (README app_port);
-# plain docker run keeps working via the default.
+# Render injects PORT (10000); plain docker run keeps working via the default.
+# WEB_CONCURRENCY=1 on the selenium worker so Chrome fits in 512MB.
 EXPOSE 7860
-CMD gunicorn -b 0.0.0.0:${PORT:-7860} -w 2 --timeout 300 app:app
+CMD gunicorn -b 0.0.0.0:${PORT:-7860} -w ${WEB_CONCURRENCY:-2} --timeout 300 app:app

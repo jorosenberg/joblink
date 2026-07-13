@@ -1,16 +1,62 @@
-from sentence_transformers import SentenceTransformer
 import numpy as np
 from typing import List, Dict, Tuple
+import os
 import pickle
 import logging
 
 logger = logging.getLogger()
 
 
+class OnnxMiniLMEncoder:
+    """Drop-in encode() for sentence-transformers/all-MiniLM-L6-v2 using
+    ONNX Runtime instead of torch: same weights, same mean-pooling +
+    L2-normalize pipeline, identical embeddings (float tolerance), and
+    roughly half the memory - fits a 512MB free instance."""
+
+    def __init__(self, model_name: str):
+        from huggingface_hub import hf_hub_download
+        from tokenizers import Tokenizer
+        import onnxruntime as ort
+
+        repo = model_name if '/' in model_name else f'sentence-transformers/{model_name}'
+        model_path = hf_hub_download(repo, 'onnx/model.onnx')
+        tok_path = hf_hub_download(repo, 'tokenizer.json')
+        self.tokenizer = Tokenizer.from_file(tok_path)
+        self.tokenizer.enable_truncation(max_length=256)
+        self.tokenizer.enable_padding()
+        self.session = ort.InferenceSession(model_path, providers=['CPUExecutionProvider'])
+        self.input_names = {i.name for i in self.session.get_inputs()}
+
+    def encode(self, texts, convert_to_numpy=True, show_progress_bar=False, batch_size=16):
+        single = isinstance(texts, str)
+        if single:
+            texts = [texts]
+        out = []
+        for i in range(0, len(texts), batch_size):
+            batch = self.tokenizer.encode_batch(texts[i:i + batch_size])
+            ids = np.array([e.ids for e in batch], dtype=np.int64)
+            mask = np.array([e.attention_mask for e in batch], dtype=np.int64)
+            feeds = {'input_ids': ids, 'attention_mask': mask}
+            if 'token_type_ids' in self.input_names:
+                feeds['token_type_ids'] = np.zeros_like(ids)
+            hidden = self.session.run(None, feeds)[0]
+            m = mask[..., None].astype(np.float32)
+            emb = (hidden * m).sum(axis=1) / np.clip(m.sum(axis=1), 1e-9, None)
+            emb = emb / np.clip(np.linalg.norm(emb, axis=1, keepdims=True), 1e-12, None)
+            out.append(emb.astype(np.float32))
+        result = np.concatenate(out, axis=0)
+        return result[0] if single else result
+
+
 class JobSimilarityAnalyzer:
     def __init__(self, model_name: str = 'all-MiniLM-L6-v2'):
-        logger.info(f"Loading sentence transformer model: {model_name}")
-        self.model = SentenceTransformer(model_name)
+        backend = os.environ.get('ST_BACKEND', 'onnx')
+        logger.info(f"Loading embedding model: {model_name} (backend={backend})")
+        if backend == 'onnx':
+            self.model = OnnxMiniLMEncoder(model_name)
+        else:  # legacy torch path (original behavior)
+            from sentence_transformers import SentenceTransformer
+            self.model = SentenceTransformer(model_name)
         self.model_name = model_name
         logger.info("Model loaded successfully")
 
@@ -146,4 +192,3 @@ class JobSimilarityAnalyzer:
                 similarities_computed += 1
 
         logger.info(f"Computed {similarities_computed} similarity pairs")
-

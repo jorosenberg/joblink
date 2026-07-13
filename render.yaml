@@ -1,6 +1,7 @@
-# Render Blueprint - joblink Flask frontend (free plan)
-# Replaces: EC2 + nginx (Render terminates TLS and serves
-# joblink.jonahrosenberg.work). Selenium runs on its own HF Space.
+# Render Blueprint - joblink, all four services on the free plan.
+# Replaces: EC2 (frontend+selenium), 3 Lambda containers, API Gateway
+# (the gateway is a Cloudflare Worker at joblink-api.jonahrosenberg.work).
+# Fill sync:false values in the dashboard when applying the blueprint.
 services:
   - type: web
     name: joblink
@@ -9,16 +10,112 @@ services:
     dockerfilePath: ./frontend/Dockerfile
     dockerContext: ./frontend
     envVars:
-      - key: API_GATEWAY_URL        # https://joblink-api.jonahrosenberg.work
+      - key: API_GATEWAY_URL      # https://joblink-api.jonahrosenberg.work
         sync: false
-      - key: ANALYSIS_URL           # analysis Space URL
+      - key: ANALYSIS_URL         # joblink-analysis service URL
         sync: false
       - key: DB_HOST
         sync: false
       - key: DB_PORT
         value: "5432"
       - key: DB_NAME
+        value: jobsdb
+      - key: DB_USER
         sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_SSLMODE
+        value: require
+      - key: SCRAPE_PASSWORD
+        sync: false
+
+  - type: web
+    name: joblink-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./backend/api/Dockerfile
+    dockerContext: ./backend
+    envVars:
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        value: "5432"
+      - key: DB_NAME
+        value: jobsdb
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_SSLMODE
+        value: require
+      - key: SCRAPE_PASSWORD
+        sync: false
+
+  - type: web
+    name: joblink-scraper
+    runtime: docker
+    plan: free
+    dockerfilePath: ./backend/scraper/Dockerfile
+    dockerContext: ./backend
+    envVars:
+      - key: SERVER_MODE
+        value: "1"
+      - key: ANALYSIS_URL         # joblink-analysis service URL
+        sync: false
+      - key: EC2_SCRAPE_URL       # https://<joblink-selenium>/internal/selenium-scrape
+        sync: false
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        value: "5432"
+      - key: DB_NAME
+        value: jobsdb
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_SSLMODE
+        value: require
+      - key: SCRAPE_PASSWORD
+        sync: false
+
+  - type: web
+    name: joblink-analysis
+    runtime: docker
+    plan: free
+    dockerfilePath: ./backend/analysis/Dockerfile
+    dockerContext: ./backend
+    envVars:
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        value: "5432"
+      - key: DB_NAME
+        value: jobsdb
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_SSLMODE
+        value: require
+
+  - type: web
+    name: joblink-selenium
+    runtime: docker
+    plan: free
+    dockerfilePath: ./frontend/Dockerfile
+    dockerContext: ./frontend
+    envVars:
+      - key: WEB_CONCURRENCY      # single worker so Chrome fits in 512MB
+        value: "1"
+      - key: ANALYSIS_URL
+        sync: false
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        value: "5432"
+      - key: DB_NAME
+        value: jobsdb
       - key: DB_USER
         sync: false
       - key: DB_PASSWORD
