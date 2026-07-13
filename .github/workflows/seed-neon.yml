@@ -1,0 +1,47 @@
+# Migrates jobs.db (SQLite, attached to a GitHub Release as split gzip parts)
+# into Neon Postgres. Replaces the retired RDS seeding path. Run manually.
+# Repo secrets required: NEON_DB_HOST, NEON_DB_USER, NEON_DB_PASS
+name: Seed Neon database
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Release tag that has jobs.db.gz.part-* attached
+        default: seed-data
+        required: true
+jobs:
+  seed:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: free-hosting }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install psycopg2-binary
+      - name: Download and reassemble jobs.db from release
+        env: { GH_TOKEN: ${{ github.token }} }
+        run: |
+          gh release download "${{ inputs.release_tag }}" --pattern 'jobs.db.gz.part-*' --repo "${{ github.repository }}"
+          cat jobs.db.gz.part-* | gunzip > jobs.db
+          ls -la jobs.db
+      - name: Initialize schema
+        env:
+          DB_SSLMODE: require
+          NEON_DB_HOST: ${{ secrets.NEON_DB_HOST }}
+          NEON_DB_USER: ${{ secrets.NEON_DB_USER }}
+          NEON_DB_PASS: ${{ secrets.NEON_DB_PASS }}
+        run: |
+          PYTHONPATH=backend/shared python -c "
+import os
+from database import JobDatabase
+JobDatabase(os.environ['NEON_DB_HOST'], 'jobsdb', os.environ['NEON_DB_USER'], os.environ['NEON_DB_PASS']).initialize_tables()
+print('schema ready')"
+      - name: Run migration
+        env:
+          PG_HOST: ${{ secrets.NEON_DB_HOST }}
+          PG_USER: ${{ secrets.NEON_DB_USER }}
+          PG_PASSWORD: ${{ secrets.NEON_DB_PASS }}
+          PG_DBNAME: jobsdb
+          PG_SSLMODE: require
+          SQLITE_PATH: jobs.db
+        run: python local/migration.py
