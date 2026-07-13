@@ -1,0 +1,14 @@
+# Cloudflare Worker - joblink API gateway
+# Deploy: cd gateway && npx wrangler deploy
+name = "joblink-gateway"
+main = "worker.js"
+compatibility_date = "2026-07-01"
+
+# Public hostname for the gateway (DNS on Cloudflare, proxied):
+routes = [
+  { pattern = "joblink-api.jonahrosenberg.work/*", zone_name = "jonahrosenberg.work" }
+]
+
+[vars]
+API_ORIGIN = "REPLACE_WITH_API_SPACE_URL"
+SCRAPER_ORIGIN = "REPLACE_WITH_SCRAPER_SPACE_URL"

@@ -1,6 +1,5 @@
 import json
 import os
-import boto3
 import logging
 import datetime
 
@@ -12,6 +11,7 @@ _scrape_password = None
 
 
 def get_secret(secret_arn):
+    import boto3  # legacy AWS fallback only
     client = boto3.client('secretsmanager')
     response = client.get_secret_value(SecretId=secret_arn)
     secret = response['SecretString']
@@ -25,7 +25,11 @@ def get_db():
     global _db
     if _db is None:
         from database import JobDatabase
-        secret = get_secret(os.environ['DB_SECRET_ARN'])
+        # Env-first (Neon/any Postgres); Secrets Manager only as legacy fallback.
+        if os.environ.get('DB_USER') and os.environ.get('DB_PASSWORD'):
+            secret = {'username': os.environ['DB_USER'], 'password': os.environ['DB_PASSWORD']}
+        else:
+            secret = get_secret(os.environ['DB_SECRET_ARN'])
         _db = JobDatabase(
             host=os.environ['DB_HOST'],
             dbname=os.environ['DB_NAME'],
@@ -39,7 +43,10 @@ def get_db():
 def get_scrape_password():
     global _scrape_password
     if _scrape_password is None:
-        _scrape_password = get_secret(os.environ['SCRAPE_PASSWORD_ARN'])
+        if os.environ.get('SCRAPE_PASSWORD'):
+            _scrape_password = os.environ['SCRAPE_PASSWORD']
+        else:
+            _scrape_password = get_secret(os.environ['SCRAPE_PASSWORD_ARN'])
     return _scrape_password
 
 

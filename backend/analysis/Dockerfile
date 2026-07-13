@@ -1,19 +1,27 @@
-FROM public.ecr.aws/lambda/python:3.11
+# Hugging Face Space (Docker SDK) - replaces the AWS Lambda container image
+# (was: public.ecr.aws/lambda/python:3.11). Same model (all-MiniLM-L6-v2)
+# pre-downloaded at build; handler.py unchanged; POST / == Event invoke.
+# Space repo layout (flat): Dockerfile, requirements.txt, database.py,
+# handler.py, analysis.py, server.py
+FROM python:3.11-slim
+
+RUN useradd -m -u 1000 user
+USER user
+ENV PATH="/home/user/.local/bin:$PATH"
+WORKDIR /app
 
 ENV JOBLIB_TEMP_FOLDER=/tmp
 ENV MPLCONFIGDIR=/tmp
-ENV HF_HOME=/var/task/hf_cache
+ENV HF_HOME=/app/hf_cache
 
-COPY analysis/requirements.txt .
-RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
-RUN pip install --no-cache-dir --only-binary=:all: -r requirements.txt
+COPY --chown=user requirements.txt .
+RUN pip install --no-cache-dir --user torch --index-url https://download.pytorch.org/whl/cpu
+RUN pip install --no-cache-dir --user --only-binary=:all: -r requirements.txt
 
-ARG HF_TOKEN
-ENV HUGGING_FACE_HUB_TOKEN=${HF_TOKEN}
 RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
-ENV HUGGING_FACE_HUB_TOKEN=
 ENV HF_HUB_OFFLINE=1
 
-COPY shared/database.py analysis/handler.py analysis/analysis.py ${LAMBDA_TASK_ROOT}/
+COPY --chown=user *.py ./
 
-CMD ["handler.handler"]
+EXPOSE 7860
+CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "7860"]

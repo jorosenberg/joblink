@@ -1,0 +1,29 @@
+# Render Blueprint - joblink Flask frontend (free plan)
+# Replaces: EC2 + nginx (Render terminates TLS and serves
+# joblink.jonahrosenberg.work). Selenium runs on its own HF Space.
+services:
+  - type: web
+    name: joblink
+    runtime: docker
+    plan: free
+    dockerfilePath: ./frontend/Dockerfile
+    dockerContext: ./frontend
+    envVars:
+      - key: API_GATEWAY_URL        # https://joblink-api.jonahrosenberg.work
+        sync: false
+      - key: ANALYSIS_URL           # analysis Space URL
+        sync: false
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        value: "5432"
+      - key: DB_NAME
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_SSLMODE
+        value: require
+      - key: SCRAPE_PASSWORD
+        sync: false
