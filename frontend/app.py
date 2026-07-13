@@ -13,10 +13,10 @@ API_GATEWAY_URL = os.environ.get('API_GATEWAY_URL', 'http://localhost:5000')
 
 def get_db():
     from database import JobDatabase
-    import boto3
-    client = boto3.client('secretsmanager')
     secret_arn = os.environ.get('DB_SECRET_ARN', '')
     if secret_arn:
+        import boto3  # legacy AWS fallback only
+        client = boto3.client('secretsmanager')
         response = client.get_secret_value(SecretId=secret_arn)
         secret = json.loads(response['SecretString'])
         return JobDatabase(
@@ -34,9 +34,9 @@ def get_db():
 
 
 def get_scrape_password():
-    import boto3
     secret_arn = os.environ.get('SCRAPE_PASSWORD_ARN', '')
     if secret_arn:
+        import boto3  # legacy AWS fallback only
         client = boto3.client('secretsmanager')
         response = client.get_secret_value(SecretId=secret_arn)
         return response['SecretString']
@@ -129,14 +129,20 @@ def run_selenium_scrape(scrape_id, url, limit, location, skills):
         if jobs_added >= 2:
             db.update_scrape_status(scrape_id, status='analyzing', message='Computing similarities...')
             try:
-                import boto3
-                lambda_client = boto3.client('lambda')
-                analysis_fn = os.environ.get('ANALYSIS_LAMBDA_NAME', 'jobscraper-analysis')
-                lambda_client.invoke(
-                    FunctionName=analysis_fn,
-                    InvocationType='Event',
-                    Payload=json.dumps({'scrape_id': scrape_id})
-                )
+                analysis_url = os.environ.get('ANALYSIS_URL', '')
+                if analysis_url:
+                    # Server mode: analysis Space answers 202, works in background.
+                    import requests
+                    requests.post(analysis_url, json={'scrape_id': scrape_id}, timeout=180)
+                else:
+                    import boto3  # legacy AWS fallback
+                    lambda_client = boto3.client('lambda')
+                    analysis_fn = os.environ.get('ANALYSIS_LAMBDA_NAME', 'jobscraper-analysis')
+                    lambda_client.invoke(
+                        FunctionName=analysis_fn,
+                        InvocationType='Event',
+                        Payload=json.dumps({'scrape_id': scrape_id})
+                    )
             except Exception as e:
                 logger.error(f"Failed to invoke analysis Lambda: {e}")
                 db.update_scrape_status(

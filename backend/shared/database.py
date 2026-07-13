@@ -1,11 +1,15 @@
 import json
-import boto3
+import os
 import psycopg2
 import psycopg2.extras
 from typing import List, Dict, Optional, Tuple
 
 
 def get_db_credentials():
+    # Env-first (Neon/any Postgres); AWS Secrets Manager only as legacy fallback.
+    if os.environ.get("DB_USER") and os.environ.get("DB_PASSWORD"):
+        return {"username": os.environ["DB_USER"], "password": os.environ["DB_PASSWORD"]}
+    import boto3
     client = boto3.client("secretsmanager")
     response = client.get_secret_value(SecretId="job-scraper/db-credentials")
     return json.loads(response["SecretString"])
@@ -22,13 +26,19 @@ class JobDatabase:
 
     def connect(self):
         if self.conn is None or self.conn.closed:
-            self.conn = psycopg2.connect(
+            connect_kwargs = dict(
                 host=self.host,
                 dbname=self.dbname,
                 user=self.user,
                 password=self.password,
                 cursor_factory=psycopg2.extras.RealDictCursor,
             )
+            # DB_SSLMODE=require for Neon (TLS enforced); unset for local dev.
+            if os.environ.get("DB_SSLMODE"):
+                connect_kwargs["sslmode"] = os.environ["DB_SSLMODE"]
+            if os.environ.get("DB_PORT"):
+                connect_kwargs["port"] = int(os.environ["DB_PORT"])
+            self.conn = psycopg2.connect(**connect_kwargs)
             self.conn.autocommit = False
             self.cursor = self.conn.cursor()
         elif self.conn.get_transaction_status() == psycopg2.extensions.TRANSACTION_STATUS_INERROR:
